@@ -1,7 +1,7 @@
-# 'UDPServerGeneral' an UDP-PHP Bridge
+# 'UDPServerGeneral' - UDP<->TCP Bridge
 _A simple Server in C for easy UDP processing via e.g. PHP_
 
-Standard Servers (Apache, nginx, ..) only work with TCP connection.
+Standard Servers (Apache, nginx, ..) only work with TCP connections.
 Sometimes IoT devices use UDP. However, complete UDP Servers are complex.
 But mapping UDP to e.g. PHP and back is a very simple solution.
 
