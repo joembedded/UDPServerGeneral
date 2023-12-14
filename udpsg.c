@@ -44,6 +44,7 @@
 typedef int SOCKET;
 #endif
 
+#include <errno.h>
 #include <stdio.h> 
 #include <stdint.h>
 #include <stdlib.h> 
@@ -60,23 +61,30 @@ typedef int SOCKET;
 #include <fcntl.h>
 #endif
 
+#include "curl/curl.h"
+
 #define PORT     5288	// UDP Listen Port
 #define CALLSCRIPT "http://localhost/wrk/udplog/payload_minimal.php?p=" // Hex-Payload will be added
 
-#define RX_BUFLEN 1024 
-#define TX_BUFLEN 1024 
+#define URL_MAXLEN 128	// Chars
+#define RX_BUFLEN 1024  // Binary
+#define TX_BUFLEN 2048  // Chars
 
 #define IDLE_TIME 10 // Idle-Timeout 10 sec
 
-char tx_replybuf[TX_BUFLEN + 32]; // Etwas mehr Platz fuer optional ZEIT-Infos am Ende
 
 SOCKET sockfd = (SOCKET)0;	// Server, localer Port
 
+long concnt = 0;// Counts Connections
+
 #define MAX_CLIENTS	10	// Maximum Number to receive, siehe oeben
 typedef struct {
+	long conid;	// Connection ID
 	struct sockaddr_in client_socket;	// Source
-	char rx_buffer[RX_BUFLEN + 1];  // OPt. String wit 0-Terminator
+	char rx_buffer[RX_BUFLEN + 1];  // OPt. String with 0-Terminator (Binary)
 	int rcv_len; // Receives len
+	char tx_replybuf[TX_BUFLEN + 1];
+	int tx_len;	// Transmit len
 } CLIENT;
 
 CLIENT clients[MAX_CLIENTS];
@@ -148,7 +156,7 @@ int receive_from_udp_socket(int idx) {
 		return rcv_len;
 	}
 #endif
-	pcli->rx_buffer[rcv_len] = 0; // Important for Strings!
+	pcli->rx_buffer[rcv_len] = 0; // Important if Strings used!
 	pcli->rcv_len = rcv_len;
 	return rcv_len;
 }
@@ -180,6 +188,7 @@ int wait_for_udp_data(void) {
 	return res;
 }
 
+/*
 // Send Data, if OK: 0, else Error
 int send_reply_to_udp_client(int idx, int tx_len) {
 	CLIENT* pcli = &clients[idx];
@@ -193,6 +202,7 @@ int send_reply_to_udp_client(int idx, int tx_len) {
 #endif
 	return res;
 }
+*/
 
 // Cleanup - No Return
 void close_udp_server_socket(void) {
@@ -202,6 +212,93 @@ void close_udp_server_socket(void) {
 #else // GCC
 	if (sockfd) close(sockfd);
 #endif
+}
+
+// --CURL Handler--
+static size_t curl_write_cb(char* data, size_t n, size_t len, void* userp)
+{
+	size_t realsize = n * len; // n: 1.d.R. 1
+
+	CLIENT* pcli = (CLIENT*)userp;
+	printf("WC_PCLI: %lx, id:%ld\n", (long)pcli, pcli->conid);
+
+	
+	int hlen = pcli->tx_len;
+	printf("Data for URL[%ld]:%d Bytes\n", pcli->conid,(int)realsize); 
+
+	size_t maxcopy = TX_BUFLEN - hlen;
+	if (maxcopy) { // limit to Maximum. Ignore Ovderdue
+		if (realsize <= maxcopy) maxcopy = realsize;
+		memcpy(&(pcli->tx_replybuf[hlen]), data, maxcopy); // DSn
+		hlen += (int)maxcopy;
+		pcli->tx_replybuf[hlen] = 0;
+		pcli->tx_len = hlen;
+	}
+
+	return realsize;
+}
+
+int run_curl(int anz) {
+	CURLM* cm;
+	CURLMsg* msg;
+
+	char url[URL_MAXLEN + RX_BUFLEN * 2];
+
+	curl_global_init(CURL_GLOBAL_ALL);
+	cm = curl_multi_init();
+
+	/* Limit the amount of simultaneous connections curl should allow: */
+	curl_multi_setopt(cm, CURLMOPT_MAXCONNECTS, (long)anz);
+
+	for (int ridx = 0; ridx < anz; ridx++) {
+		CLIENT* pcli = &clients[ridx];
+		// Build URL (GET)
+		char* pc = url + sprintf(url,"%s", CALLSCRIPT);
+		for (int di = 0; di < pcli->rcv_len; di++) {
+			uint8_t c = (pcli->rx_buffer[di]) & 255;
+			pc += sprintf(pc,"%02X",c);
+		}
+		pcli->tx_len = 0;
+		pcli->conid = concnt++;	// Unique ID
+		printf("Add URL[%ld](Idx:%d):'%s'\n", pcli->conid, ridx, url); // Control
+		CURL* eh = curl_easy_init();
+		curl_easy_setopt(eh, CURLOPT_URL, url);
+		curl_easy_setopt(eh, CURLOPT_WRITEFUNCTION, curl_write_cb);
+		printf("PCLI: %lx, id:%ld\n", (long)pcli, pcli->conid);
+		curl_easy_setopt(eh, CURLOPT_WRITEDATA, pcli);
+		curl_easy_setopt(eh, CURLOPT_PRIVATE, pcli);
+		curl_multi_add_handle(cm, eh);
+	}
+
+	int left = anz;
+	int msgs_left = -1;
+	do {
+		int still_alive = 1;
+		curl_multi_perform(cm, &still_alive);
+
+		while ((msg = curl_multi_info_read(cm, &msgs_left))) {
+			if (msg->msg == CURLMSG_DONE) {
+				CURL* e = msg->easy_handle;
+				CLIENT* pcli;
+
+				curl_easy_getinfo(e, CURLINFO_PRIVATE, (void*)&pcli);
+				printf("Reply[%ld]: '%s' ", pcli->conid,pcli->tx_replybuf);
+				printf("Result: %d:%s\n", msg->data.result, curl_easy_strerror(msg->data.result));
+
+				curl_multi_remove_handle(cm, e);
+				curl_easy_cleanup(e);
+				left--;
+			}
+			else {
+				printf("WARNING: CURLMsg(%d)\n", msg->msg);
+			}
+		}
+		if (left) curl_multi_wait(cm, NULL, 0, 10, NULL); // Wait 10 msec
+	} while (left);
+
+	curl_multi_cleanup(cm);
+	curl_global_cleanup();
+	return 0;
 }
 
 // Server-Loop - Return only if Error
@@ -237,6 +334,9 @@ int udp_server_loop(void) {
 
 		printf("Anz. Pakete emmpfangen: %d\n", cidx);
 
+		res = run_curl(cidx);
+
+		/*
 		int ridx;	// Reply-Index
 		for (ridx = 0; ridx < cidx; ridx++) {
 			CLIENT* pcli = &clients[ridx];
@@ -250,7 +350,6 @@ int udp_server_loop(void) {
 			}
 			printf("\n");
 
-/*
 			// Minimum Reply
 			time_t ct = time(NULL);
 			uint32_t unixsec = (uint32_t)ct;
@@ -263,8 +362,9 @@ int udp_server_loop(void) {
 				printf("ERROR: SendTo UDP Client Socket Index[%d] failed (%d)\n", ridx, res);
 				break;
 			}
-*/
-			}
+
+		}
+		*/
 	}
 
 }
@@ -273,7 +373,10 @@ int udp_server_loop(void) {
 int main() {
 
 	printf("--- UDP Server General " __DATE__ " " __TIME__ "\n");
-
+	if (strlen(CALLSCRIPT) > (URL_MAXLEN - 1)) {
+		printf("ERROR: CALLSCRIP Len!\n");
+		return -1;
+	}
 	int res = init_udp_server_socket();
 	if (res) {
 		printf("ERROR: Init UDP Server Socket failed (%d)\n", res);

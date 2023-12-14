@@ -6,7 +6,7 @@ Sometimes IoT devices use UDP. However, complete UDP Servers are complex.
 But mapping UDP to e.g. PHP and back is a very simple solution.
 
 This small UDP Server in C sends all incomming UDP via Curl/libcurl 
-to PHP and the result back via UDP.
+to a Standard Server (e.g PHP) and the result back via UDP.
 
 For simplicity, the complete server is in one single C Source ;-)
 
