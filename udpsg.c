@@ -38,7 +38,7 @@
 ****************************************************/
 
 #define VERSION  "V1.00 15.12.2023"
-#define DEBUG	1 // 1 for Output
+
 
 #ifdef _MSC_VER	// MS VC
 #define _CRT_SECURE_NO_WARNINGS
@@ -69,7 +69,11 @@ typedef int SOCKET;
 
 //-----------------------------------------
 #define UDP_PORT     5288	// UDP Listen/Send Port
+#ifdef _MSC_VER	// MS VS
 #define CALLSCRIPT "http://localhost/wrk/udplog/payload_minimal.php?p=" // Hex-Payload will be added
+#else // GCC
+#define CALLSCRIPT "http://joembedded.eu/wrk/udplog/payload_minimal.php?p=" // Hex-Payload will be added
+#endif
 #define CALLSCRIPT_MAXRUN_MS	1500 // Recommended: <2 sec
 #define MAX_CLIENTS	10		// Maximum Number to UPD similar
 //-----------------------------------------
@@ -79,6 +83,9 @@ typedef int SOCKET;
 #define TX_HEX2CHAR_BUFLEN 2048  // Chars - 1k Bin in 2k chars
 
 #define IDLE_TIME 10 // Server Loop Idle-Timeout 10 sec
+
+int dbg = 0;
+
 SOCKET sockfd = (SOCKET)0;	// Server, local Port
 
 typedef struct {
@@ -135,14 +142,14 @@ int receive_from_udp_socket(int idx) {
 		return lastError;
 	}
 #else // GCC
-	int rcv_len = recvfrom(sockfd, pcli->rx_buffer, RX_BUFLEN, 0, (struct sockaddr*)&pcli->client_socket, &client_sock_len);
+	int rcv_len = recvfrom(sockfd, pcli->rx_buffer, RX_BYTE_BUFLEN, 0, (struct sockaddr*)&pcli->client_socket, &client_sock_len);
 	if (rcv_len == -1) return 0; //printf("(Timeout)\n");
 	else if (rcv_len < 0) return rcv_len;
-	
+
 #endif
-#if DEBUG
-	printf("Received %d Bytes from %s:%d\n", rcv_len,inet_ntoa(pcli->client_socket.sin_addr), ntohs(pcli->client_socket.sin_port));
-#endif
+	if (dbg) {
+		printf("Received %d Bytes from %s:%d\n", rcv_len, inet_ntoa(pcli->client_socket.sin_addr), ntohs(pcli->client_socket.sin_port));
+	}
 	pcli->rx_buffer[rcv_len] = 0; // Important if Strings used!
 	pcli->rcv_len = rcv_len;
 	return rcv_len;
@@ -175,21 +182,18 @@ int wait_for_udp_data(void) {
 	return res;
 }
 
-/*
 // Send Data, if OK: 0, else Error
-int send_reply_to_udp_client(int idx, int tx_len) {
-	CLIENT* pcli = &clients[idx];
+int send_reply_to_udp_client(CLIENT* pcli, char* txbuf, int tx_len) {
 	int res;
 #ifdef _MSC_VER	// MS VS
-	if (sendto(sockfd, tx_replybuf, tx_len, 0, (struct sockaddr*)&pcli->client_socket, client_sock_len) == SOCKET_ERROR) res = WSAGetLastError();
+	if (sendto(sockfd, txbuf, tx_len, 0, (struct sockaddr*)&pcli->client_socket, client_sock_len) == SOCKET_ERROR) res = WSAGetLastError();
 	else res = 0;
 #else // GCC
-	res = sendto(sockfd, tx_replybuf, tx_len, 0, (const struct sockaddr*)&pcli->client_socket, client_sock_len);
+	res = sendto(sockfd, txbuf, tx_len, 0, (const struct sockaddr*)&pcli->client_socket, client_sock_len);
 	if (res == tx_len) res = 0;
 #endif
 	return res;
 }
-*/
 
 // Cleanup - No Return
 void close_udp_server_socket(void) {
@@ -218,11 +222,13 @@ static size_t curl_write_cb(char* data, size_t n, size_t len, void* userp)
 	return realsize;
 }
 
+// Return 0 without Errors
 int run_curl(int anz) {
 	CURLM* cm;
 	CURLMsg* msg;
 
-	char url[URL_MAXLEN + (RX_BYTE_BUFLEN * 2) +1];
+	char url[URL_MAXLEN + (RX_BYTE_BUFLEN * 2) + 1];
+	int cp_err = 0; // Curl Process Errors (Cnt)
 
 	curl_global_init(CURL_GLOBAL_ALL);
 	cm = curl_multi_init();
@@ -237,10 +243,10 @@ int run_curl(int anz) {
 			pc += sprintf(pc, "%02X", c);
 		}
 		pcli->tx_len = 0;	// No Reply
-		pcli->tx_replybuf[0] = 0;	
-#if DEBUG
-		printf("Add URL(Idx:%d):'%s'\n", ridx, url); // Control
-#endif
+		pcli->tx_replybuf[0] = 0;
+		if (dbg) {
+			printf("Add URL(Idx:%d):'%s'\n", ridx, url); // Control
+		}
 		CURL* eh = curl_easy_init();
 		curl_easy_setopt(eh, CURLOPT_URL, url);
 		curl_easy_setopt(eh, CURLOPT_WRITEFUNCTION, curl_write_cb);
@@ -254,8 +260,8 @@ int run_curl(int anz) {
 		curl_multi_add_handle(cm, eh);
 	}
 
-	char bin_reply[(TX_HEX2CHAR_BUFLEN/2) +1];
-	for(;;){
+	char bin_reply[(TX_HEX2CHAR_BUFLEN / 2) + 1];
+	for (;;) {
 		int cactive = 0; // Connections active
 		curl_multi_perform(cm, &cactive);
 		int msgs_left = -1; // Dummy
@@ -272,7 +278,7 @@ int run_curl(int anz) {
 					while (tanz) {
 						char ch = *phex++;
 						if ((ch < '0' || ch > '9') && (ch < 'a' || ch > 'f') && (ch < 'A' || ch > 'F')) break;
-						if (ch >= 'a') ch -= ('a' - 10); 
+						if (ch >= 'a') ch -= ('a' - 10);
 						else if (ch >= 'A')	ch -= ('A' - 10);
 						else ch -= '0';
 						char cl = *phex++;
@@ -280,38 +286,47 @@ int run_curl(int anz) {
 						if (cl >= 'a') cl -= ('a' - 10);
 						else if (cl >= 'A')	cl -= ('A' - 10);
 						else cl -= '0';
-						tanz-=2;
+						tanz -= 2;
 						*pbin++ = (char)((ch << 4) | cl);
 					}
 					if (tanz) cres = -tanz;	// Error in String
 				}
-#if DEBUG
-				int idx = (int)(pcli - &clients[0]);
-				printf("Reply(Ind.%d): '%s'[%d]", idx, pcli->tx_replybuf, pcli->tx_len);
-				printf("Result: %d:%s\n",cres , curl_easy_strerror(cres));
-				printf("Dest: %s:%d\n", inet_ntoa(pcli->client_socket.sin_addr), ntohs(pcli->client_socket.sin_port));
-#endif
+				if (dbg) {
+					int idx = (int)(pcli - &clients[0]);
+					printf("Reply(Ind.%d): '%s'[%d]\n", idx, pcli->tx_replybuf, pcli->tx_len);
+					printf("Result: %d:%s\n", cres, curl_easy_strerror(cres));
+					printf("Dest: %s:%d\n", inet_ntoa(pcli->client_socket.sin_addr), ntohs(pcli->client_socket.sin_port));
+				}
+
+				if (!cres) { // Send UDP Reply
+					int tres = send_reply_to_udp_client(pcli, bin_reply, pcli->tx_len / 2);
+					if (tres) {
+						printf("ERROR: SendTo UDP Client Socket failed (%d)\n", tres);
+						cp_err++;
+					}
+				}
 				curl_multi_remove_handle(cm, e);
 				curl_easy_cleanup(e);
-			} // else ignore
+
+			} // else ignore msg
 		}
 		if (cactive) curl_multi_wait(cm, NULL, 0, 10, NULL); // Wait 10 msec
 		else break;
-	} 
+	}
 
 	curl_multi_cleanup(cm);
 	curl_global_cleanup();
-	return 0;
+	return cp_err;
 }
 
 // Server-Loop - Return only if Error
 int udp_server_loop(void) {
 	int wcnt = 0;
 	while (1) {
-#if DEBUG
-		printf(" Wait(%d) ", wcnt++);
-		fflush(stdout);
-#endif
+		if (dbg) {
+			printf(" Wait(%d) ", wcnt++);
+			fflush(stdout);
+		}
 		int res = wait_for_udp_data();
 		if (res < 0) {
 			printf("ERROR: 'select()' failed (%d)\n", res);
@@ -329,26 +344,33 @@ int udp_server_loop(void) {
 			}
 			else if (!res) break; // Nothing (more) received
 		}
-		/*res =*/ run_curl(cidx); // cidx: Nr of packets received
+		res = run_curl(cidx); // cidx: Nr of packets received
+		if (res) return res;
 
-
-
-		/* Optional Delay for Tests */
-		printf("*** Warte ***\n");
-#ifdef _MSC_VER	// MS VS only
-		Sleep(8000);
-#else // GCC
-		sleep(5);
-#endif
-
+		/* Optional Delay for Slow CurlProcessing Test
+				printf("*** Extra Wait ***\n");
+		#ifdef _MSC_VER	// MS VS only
+				Sleep(5000);
+		#else // GCC
+				sleep(5);
+		#endif
+		*/
 	}
-
 }
 
 // --- MAIN ---
-int main() {
-	printf("--- UDPServerGeneral %s - (C) Joembedded\n", VERSION);
-	printf("--- Script: '%s'\n", CALLSCRIPT);
+int main(int argc, char* argv[]) {
+	printf("--- %s - %s - (C) Joembedded\n", argv[0], VERSION);
+	for (int i = 1; i < argc; i++) {
+		if (*argv[i] == '-') switch (argv[i][1]) {
+		case 'd':
+			dbg = 1;
+			printf("Debug: on\n");
+			break;
+		}
+		else printf("Options: -d: Debug ");
+	}
+	printf("Script: '%s'\n", CALLSCRIPT);
 	if (strlen(CALLSCRIPT) > (URL_MAXLEN - 1)) {
 		printf("ERROR: CALLSCRIPT Len!\n");
 		return -1;
@@ -359,7 +381,7 @@ int main() {
 		return -1;
 	}
 	else {
-		printf("--- Wait on UDP Port %d...\n", UDP_PORT);
+		printf("Wait on UDP Port %d...\n", UDP_PORT);
 		udp_server_loop();
 	}
 	close_udp_server_socket();
