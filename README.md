@@ -14,7 +14,7 @@ For simplicity, the complete server is in one single C Source ;-)
 Compile it on the Server and run it as Service.
 
 ![Overview](./docu/ovinfo.png "Overview")
-
+ 
 ## A Minimum Script in PHP
 ```
 	<?php
