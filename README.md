@@ -7,7 +7,7 @@ But mapping UDP to e.g. PHP and back is a very simple solution.
 
 This small UDP Server in C sends all incomming UDP via Curl/libcurl 
 to a Standard Server (e.g PHP) and the result back via UDP. 
-Developed for use with LTX-Microcloud.
+Developed for use with **LTX-Microcloud**.
 
 For simplicity, the complete server is in one single C Source ;-)
 

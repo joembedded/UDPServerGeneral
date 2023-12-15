@@ -75,17 +75,17 @@ typedef int SOCKET;
 //-----------------------------------------
 
 #define URL_MAXLEN 160	// Chars
-#define RX_BUFLEN 1024  // Binary - UDP pakets are <= 1k by default
-#define TX_BUFLEN 2048  // Chars - 1k in chars
+#define RX_BYTE_BUFLEN 1024  // Binary - UDP pakets are <= 1k by default
+#define TX_HEX2CHAR_BUFLEN 2048  // Chars - 1k Bin in 2k chars
 
 #define IDLE_TIME 10 // Server Loop Idle-Timeout 10 sec
 SOCKET sockfd = (SOCKET)0;	// Server, local Port
 
 typedef struct {
 	struct sockaddr_in client_socket;	// Source
-	char rx_buffer[RX_BUFLEN + 1];  // OPt. String with 0-Terminator (Binary)
+	char rx_buffer[RX_BYTE_BUFLEN + 1];  // OPt. String with 0-Terminator (Binary)
 	int rcv_len; // Receives len
-	char tx_replybuf[TX_BUFLEN + 1];
+	char tx_replybuf[TX_HEX2CHAR_BUFLEN + 1];
 	int tx_len;	// Transmit len
 } CLIENT;
 
@@ -125,7 +125,7 @@ int receive_from_udp_socket(int idx) {
 	memset(&pcli->client_socket, 0, client_sock_len);
 
 #ifdef _MSC_VER	// MS VS
-	int rcv_len = recvfrom(sockfd, pcli->rx_buffer, RX_BUFLEN, 0, (struct sockaddr*)&pcli->client_socket, &client_sock_len);
+	int rcv_len = recvfrom(sockfd, pcli->rx_buffer, RX_BYTE_BUFLEN, 0, (struct sockaddr*)&pcli->client_socket, &client_sock_len);
 	if (rcv_len == SOCKET_ERROR) {
 		int lastError = WSAGetLastError();
 		if (lastError == WSAETIMEDOUT) 	return 0; //printf("(Timeout)\n");
@@ -207,7 +207,7 @@ static size_t curl_write_cb(char* data, size_t n, size_t len, void* userp)
 	size_t realsize = n * len; // n: 1.d.R. 1
 	CLIENT* pcli = (CLIENT*)userp;
 	int hlen = pcli->tx_len;
-	size_t maxcopy = TX_BUFLEN - hlen;
+	size_t maxcopy = TX_HEX2CHAR_BUFLEN - hlen;
 	if (maxcopy) { // limit to Maximum. Ignore Ovderdue
 		if (realsize <= maxcopy) maxcopy = realsize;
 		memcpy(&(pcli->tx_replybuf[hlen]), data, maxcopy); // DSn
@@ -222,7 +222,7 @@ int run_curl(int anz) {
 	CURLM* cm;
 	CURLMsg* msg;
 
-	char url[URL_MAXLEN + RX_BUFLEN * 2];
+	char url[URL_MAXLEN + (RX_BYTE_BUFLEN * 2) +1];
 
 	curl_global_init(CURL_GLOBAL_ALL);
 	cm = curl_multi_init();
@@ -254,6 +254,7 @@ int run_curl(int anz) {
 		curl_multi_add_handle(cm, eh);
 	}
 
+	char bin_reply[(TX_HEX2CHAR_BUFLEN/2) +1];
 	for(;;){
 		int cactive = 0; // Connections active
 		curl_multi_perform(cm, &cactive);
@@ -263,10 +264,30 @@ int run_curl(int anz) {
 				CURL* e = msg->easy_handle;
 				CLIENT* pcli;
 				curl_easy_getinfo(e, CURLINFO_PRIVATE, (void*)&pcli);
-				int cres = msg->data.result; // 0: OK, e.g. 28:Timeout
+				int cres = msg->data.result; // 0:OK, e.g. 28:Timeout
+				if (!cres) {
+					char* phex = pcli->tx_replybuf;
+					char* pbin = bin_reply;
+					int tanz = pcli->tx_len;
+					while (tanz) {
+						char ch = *phex++;
+						if ((ch < '0' || ch > '9') && (ch < 'a' || ch > 'f') && (ch < 'A' || ch > 'F')) break;
+						if (ch >= 'a') ch -= ('a' - 10); 
+						else if (ch >= 'A')	ch -= ('A' - 10);
+						else ch -= '0';
+						char cl = *phex++;
+						if ((cl < '0' || cl > '9') && (cl < 'a' || cl > 'f') && (cl < 'A' || cl > 'F')) break;
+						if (cl >= 'a') cl -= ('a' - 10);
+						else if (cl >= 'A')	cl -= ('A' - 10);
+						else cl -= '0';
+						tanz-=2;
+						*pbin++ = (char)((ch << 4) | cl);
+					}
+					if (tanz) cres = -tanz;	// Error in String
+				}
 #if DEBUG
 				int idx = (int)(pcli - &clients[0]);
-				printf("Reply(Ind.%d): '%s'[%d] ", idx, pcli->tx_replybuf, pcli->tx_len);
+				printf("Reply(Ind.%d): '%s'[%d]", idx, pcli->tx_replybuf, pcli->tx_len);
 				printf("Result: %d:%s\n",cres , curl_easy_strerror(cres));
 				printf("Dest: %s:%d\n", inet_ntoa(pcli->client_socket.sin_addr), ntohs(pcli->client_socket.sin_port));
 #endif
