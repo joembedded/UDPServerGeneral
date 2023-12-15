@@ -16,18 +16,18 @@ Compile it on the Server and run it as Service.
 ![Overview](./docu/ovinfo.png "Overview")
 
 ## A Minimum Script in PHP
-...
+```
 	<?php
 		header('Content-Type: text/plain');
-		$hexplbe = @$_REQUEST['p'];
+		$hexplbe = @$_REQUEST['p']; // *** Payload: Hex-String
 		if (!isset($hexplbe)) die("#ERROR: No Payload");
 		$paybytes = @unpack('C*', hex2bin($hexplbe));
 		$paycount = count($paybytes);
 		if(!$paycount) die("#ERROR: Payload Format ('$hexplbe')");
 		$payrep =  bin2hex(pack("CN", $paycount,time()));
-		echo $payrep; // Output: Cnt.u8 Time.u32
+		echo $payrep; // *** Reply (5 Bytes): Cnt.u8 Time.u32 as Hex-String
 	?>
-...
+```
 
 ## Installation/Test ##
 - Tested with Visual Studio (Windows) and GCC

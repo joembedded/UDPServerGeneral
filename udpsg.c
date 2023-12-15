@@ -320,7 +320,6 @@ int udp_server_loop(void) {
 		sleep(5);
 #endif
 
-
 	}
 
 }
