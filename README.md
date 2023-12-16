@@ -20,13 +20,12 @@ Compile it on the Server and run it as Service.
 ```
 	<?php
 		header('Content-Type: text/plain');
-		$hexplbe = @$_REQUEST['p']; // *** Payload: Hex-String
+		$hexplbe = @$_REQUEST['p'];
 		if (!isset($hexplbe)) die("#ERROR: No Payload");
-		$paybytes = @unpack('C*', hex2bin($hexplbe));
-		$paycount = count($paybytes); // Len of Payload
-		if(!$paycount) die("#ERROR: Payload Format ('$hexplbe')");
-		$payrep =  bin2hex(pack("CN", $paycount,time()));
-		echo $payrep; // *** Reply (5 Bytes): Cnt.u8 Time.u32 as Hex-String
+		$payload=@hex2bin($hexplbe);
+		if(!strlen($payload)) die("#ERROR: Payload Format ('$hexplbe')"); // Odd size or wrong Chars?
+		$payrep =  bin2hex(strrev($payload)); // Reverse
+		echo $payrep;
 	?>
 ```
 

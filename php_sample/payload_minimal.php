@@ -2,18 +2,18 @@
 /* Payload-Script ***Minimal_for_Tests*** 'p': Payload
 * Payload must be a HEX String in BE Order (for easier debugging) 
 * e.g. 202122 represents 32,33,33
-* Call e.g. : http://localhost/wrk/udplog/payload_minimal.php?p=0011223344556677
-* Reply is an Hex string in BE Order
-* e.g. here: 08657b462b (08: 8 Bytes Payload, 657b462b: Unix-Timestamp for 14.12.2023)
+* Call e.g. : http://localhost/ltx/sw/udp/payload_minimal.php?p=48616c6c6f2057656c74
+* Call e.g. : http://joembedded.eu/ltx/sw/udp/payload_minimal.php?p=48616c6c6f2057656c74
+* Reply is an Hex string of the reversed Payload in BE Order
+* e.g. here: 746c6557206f6c6c6148
 */
 
 header('Content-Type: text/plain');
 
 $hexplbe = @$_REQUEST['p'];
 if (!isset($hexplbe)) die("#ERROR: No Payload");
-$paybytes = @unpack('C*', hex2bin($hexplbe));
-$paycount = count($paybytes);
-if(!$paycount) die("#ERROR: Payload Format ('$hexplbe')"); // Odd size or wrong Chars?
-$payrep =  bin2hex(pack("CN", $paycount,time()));
+$payload=@hex2bin($hexplbe);
+if(!strlen($payload)) die("#ERROR: Payload Format ('$hexplbe')"); // Odd size or wrong Chars?
+$payrep =  bin2hex(strrev($payload)); // Reverse
 echo $payrep;
 // --- END ---
