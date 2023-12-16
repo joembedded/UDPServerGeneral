@@ -33,7 +33,7 @@ Compile it on the Server and run it as Service.
 ## Installation/Test ##
 - Tested with Visual Studio (Windows) and GCC
 - For details see Sourcecode
-- Here is HowTo install a System Service on UBUNTU Linux: see LTX-Microcloud -> sw/udp/
+- Here is HowTo install a System Service on UBUNTU Linux: see LTX-Microcloud -> sw/udp/notes.txt
 
 ## Links ##
 - Curl/libcurl: https://curl.se
