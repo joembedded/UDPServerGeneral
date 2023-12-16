@@ -1,6 +1,8 @@
 /****************************************************
 * udpsg.c - UDP Server Multi Plattform - (C)Joembedded.de
 *
+* Project Source: https://github.com/joembedded/UDPServerGeneral
+* 
 * For performance reasons, each UDP packet is not processed individually,
 * Instead, up to MAX_CLIENTS packets are read at once.
 * This allows a subsequent libCurl call to use the 'curl_multi_init'
@@ -36,7 +38,7 @@
 *
 ****************************************************/
 
-#define VERSION  "V1.01 16.12.2023"
+#define VERSION  "V1.02 16.12.2023"
 
 
 #ifdef _MSC_VER	// MS VC
