@@ -8,7 +8,7 @@ But mapping UDP to e.g. PHP and back is a very simple solution.
 For simple projects a Server (as System Service) could be written and run in e.g. PHP directly, 
 but for development this solution might be easier: a small UDP Server in C sends all incomming 
 UDP via Curl/libcurl to a Standard Server (e.g PHP) and the result back via UDP. 
-Developed for use with **LTX-Microcloud**. 
+Developed for use with **LTX Microcloud**. 
 
 For simplicity, the complete server is in one single C Source ;-)
 
@@ -37,4 +37,5 @@ Compile it on the Server and run it as Service.
 
 ## Links ##
 - Curl/libcurl: https://curl.se
+- LTX Microcloud: https://github.com/joembedded/LTX_server
 ***
