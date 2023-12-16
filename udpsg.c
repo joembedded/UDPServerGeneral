@@ -1,5 +1,5 @@
-/****************************************************
-* udpsg.c - UDP Server Multi Plattform - (C)Joembedded.de
+/*****************************************************************************
+* udpsg.c - - UDPServerGeneral, UDP Server Multi Plattform - (C)Joembedded.de
 *
 * Project Source: https://github.com/joembedded/UDPServerGeneral
 * 
@@ -12,7 +12,7 @@
 * the simple version with 'curl_multi'.
 *
 *
-* UPSServerGeneral works with Windows (MS VS) ans Linux (GCC).
+* UDPServerGeneral works with Windows (MS VS) ans Linux (GCC).
 *
 * Windows: For MS VS 'libcurl.dll' is required:
 * Install via vcpk (see https://github.com/curl/curl/blob/master/docs/INSTALL.md#building-using-vcpkg ):
