@@ -27,8 +27,8 @@
 * Linux:
 *   Libcurl: apt install libcurl4-openssl-dev -y
 *   Link via 'gcc -lcurl'
-*   Directory e.g.: cd /var/www/vhosts/joembedded.eu/c
-*   Compile: gcc udpsg.c -o g.out
+*   Directory e.g.: cd /var/www/vhosts/joembedded.eu/httpdocs/ltx/sw/udp
+*   Compile: gcc udpsg.c -o udpsg -lcurl
 *
 * Test with e.g:
 *    nc -u localhost 5288 -v
@@ -38,7 +38,7 @@
 *
 ****************************************************/
 
-#define VERSION  "V1.02 16.12.2023"
+#define VERSION  "V1.10 16.12.2023"
 
 
 #ifdef _MSC_VER	// MS VC
@@ -72,9 +72,9 @@ typedef int SOCKET;
 #define UDP_PORT     5288	// UDP Listen/Send Default Port
 // Default-Script Windows/Linux - Hex-Payload will be added:
 #ifdef _MSC_VER	// MS VS
-#define CALLSCRIPT "http://localhost/wrk/udplog/payload_minimal.php?p=" 
+#define CALLSCRIPT "http://localhost/ltx/sw/udp/payload_minimal.php?p=" 
 #else // GCC
-#define CALLSCRIPT "http://joembedded.eu/wrk/udplog/payload_minimal.php?p="
+#define CALLSCRIPT "http://joembedded.eu/ltx/sw/udp/payload_minimal.php?p="
 #endif
 #define CALLSCRIPT_MAXRUN_MS	1500 // Recommended: <2 sec
 #define MAX_CLIENTS	10		// Maximum Number to UPD similar
@@ -91,7 +91,6 @@ int _verbose = 0;
 SOCKET sockfd = (SOCKET)0;	// Server, local Port
 int udp_port = UDP_PORT;	
 char callscript[URL_MAXLEN] = CALLSCRIPT;
-
 
 typedef struct {
 	struct sockaddr_in client_socket;	// Source
@@ -265,7 +264,7 @@ int run_curl(int anz) {
 		curl_multi_add_handle(cm, eh);
 	}
 
-	char bin_reply[(TX_HEX2CHAR_BUFLEN / 2) + 1];
+	char bin_reply[(TX_HEX2CHAR_BUFLEN / 2) ]; // Binary Buffer
 	for (;;) {
 		int cactive = 0; // Connections active
 		curl_multi_perform(cm, &cactive);
