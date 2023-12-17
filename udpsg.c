@@ -243,8 +243,10 @@ int run_curl(int anz) {
 		char* pc = url + sprintf(url, "%s", callscript);
 		for (int di = 0; di < pcli->rcv_len; di++) {
 			uint8_t c = (pcli->rx_buffer[di]) & 255;
-			pc += sprintf(pc, "%02X", c);
+			*pc++ = "0123456789abcdef"[(c >> 4)];
+			*pc++ = "0123456789abcdef"[(c&15)];
 		}
+		*pc = 0;
 		pcli->tx_len = 0;	// No Reply
 		pcli->tx_replybuf[0] = 0;
 		if (_verbose) {
